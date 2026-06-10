@@ -111,9 +111,14 @@ def extract_characteristics(text):
         "водо": "влагозащита",
         "антистат": "антистатические свойства",
         "мороз": "защита от холода",
+        " тн ": "защита от холода",
+        " ми ": "защита от истирания",
+        " з ": "защита от производственных загрязнений",
     }
+    padded_source = f" {source} "
     for marker, label in property_map.items():
-        if marker in source and label not in properties:
+        source_to_check = padded_source if marker.strip() in {"тн", "ми", "з"} else source
+        if marker in source_to_check and label not in properties:
             properties.append(label)
     result["protective_properties"] = properties
 
