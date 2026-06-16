@@ -8,6 +8,14 @@ PRODUCTS_FILE = DATA_DIR / "products_cache.json"
 CONFIRMED_FILE = DATA_DIR / "confirmed_analogs.json"
 MANUFACTURERS_FILE = DATA_DIR / "manufacturers.json"
 
+DEFAULT_MANUFACTURERS = [
+    {
+        "manufacturer": "Факел",
+        "catalog_url": "https://www.f-tk.ru/catalog/spetsodezhda/spetsodezhda_zimnyaya/kostyumy_zimnie/",
+        "added_at": "default",
+    }
+]
+
 
 def ensure_data_files():
     DATA_DIR.mkdir(exist_ok=True)
@@ -54,7 +62,11 @@ def get_last_update():
 
 
 def load_manufacturers():
-    return read_json(MANUFACTURERS_FILE)
+    manufacturers = read_json(MANUFACTURERS_FILE)
+    if not manufacturers:
+        write_json(MANUFACTURERS_FILE, DEFAULT_MANUFACTURERS)
+        return DEFAULT_MANUFACTURERS
+    return manufacturers
 
 
 def add_manufacturer(manufacturer, catalog_url):
