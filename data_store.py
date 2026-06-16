@@ -13,6 +13,11 @@ DEFAULT_MANUFACTURERS = [
         "manufacturer": "Факел",
         "catalog_url": "https://www.f-tk.ru/catalog/spetsodezhda/",
         "added_at": "default",
+    },
+    {
+        "manufacturer": "Эксперт",
+        "catalog_url": "https://psk.expert/catalog/spetsodezhda/",
+        "added_at": "default",
     }
 ]
 
