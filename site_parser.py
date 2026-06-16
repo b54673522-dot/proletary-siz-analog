@@ -119,10 +119,7 @@ def product_from_fakel_catalog_row(manufacturer, url, name, row_text):
     )
 
 
-def parse_fakel_catalog(manufacturer, catalog_url, soup, max_products):
-    if "/catalog/item-" in catalog_url:
-        return [product_from_fakel_card(manufacturer, catalog_url, soup)]
-
+def collect_fakel_products_from_soup(manufacturer, catalog_url, soup, max_products):
     products = []
     seen_urls = set()
     for link in soup.find_all("a", href=True):
@@ -138,12 +135,59 @@ def parse_fakel_catalog(manufacturer, catalog_url, soup, max_products):
         if len(name) < 8:
             continue
 
-        row_text = clean_text(link.parent.get_text(" ")) if link.parent else name
+        row_text = nearest_useful_text(link)
         products.append(product_from_fakel_catalog_row(manufacturer, url, name, row_text))
         seen_urls.add(url)
 
         if len(products) >= max_products:
             break
+
+    return products
+
+
+def collect_fakel_category_urls(catalog_url, soup):
+    urls = []
+    for link in soup.find_all("a", href=True):
+        url = urljoin(catalog_url, link["href"])
+        path = urlparse(url).path
+        if url in urls:
+            continue
+        if "/catalog/" not in path or "/catalog/item-" in path:
+            continue
+        if path.rstrip("/") == urlparse(catalog_url).path.rstrip("/"):
+            continue
+        urls.append(url)
+    return urls
+
+
+def parse_fakel_catalog(manufacturer, catalog_url, soup, max_products):
+    if "/catalog/item-" in catalog_url:
+        return [product_from_fakel_card(manufacturer, catalog_url, soup)]
+
+    products = collect_fakel_products_from_soup(manufacturer, catalog_url, soup, max_products)
+    seen_product_urls = {product["url"] for product in products}
+
+    category_urls = collect_fakel_category_urls(catalog_url, soup)
+    for category_url in category_urls[:30]:
+        if len(products) >= max_products:
+            break
+        try:
+            response = requests.get(category_url, headers=HEADERS, timeout=20)
+            response.raise_for_status()
+        except requests.RequestException:
+            continue
+
+        category_soup = BeautifulSoup(response.text, "html.parser")
+        found = collect_fakel_products_from_soup(
+            manufacturer,
+            category_url,
+            category_soup,
+            max_products - len(products),
+        )
+        for product in found:
+            if product["url"] not in seen_product_urls:
+                products.append(product)
+                seen_product_urls.add(product["url"])
 
     return products
 
@@ -391,7 +435,7 @@ def looks_like_product_block(tag):
     return any(marker in marker_text for marker in markers)
 
 
-def parse_catalog(manufacturer, catalog_url, max_products=80):
+def parse_catalog(manufacturer, catalog_url, max_products=500):
     response = requests.get(catalog_url, headers=HEADERS, timeout=20)
     response.raise_for_status()
 
