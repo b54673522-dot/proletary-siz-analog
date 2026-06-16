@@ -80,20 +80,6 @@ st.title("Пролетарий: единая база СИЗ и подбор а�
 st.caption("Первая простая версия: сайты производителей -> база товаров -> позиция конкурента -> аналоги.")
 st.caption("Версия поставщиков: Факел + Эксперт + Спецобъединение")
 
-if "auto_refresh_attempted" not in st.session_state:
-    st.session_state.auto_refresh_attempted = False
-
-if not st.session_state.auto_refresh_attempted and load_manufacturers() and not load_products():
-    st.session_state.auto_refresh_attempted = True
-    with st.spinner("Первый запуск: автоматически загружаю товары поставщиков..."):
-        auto_count, auto_errors = refresh_products()
-    if auto_count:
-        st.success(f"Стартовая база товаров загружена. Собрано карточек: {auto_count}.")
-    else:
-        st.warning("Стартовую базу пока не удалось загрузить автоматически. Попробуйте нажать «Обновить товары».")
-    for error in auto_errors:
-        st.error(error)
-
 st.header("База производителей")
 st.info("Поставщики загружаются автоматически. Этот блок нужен только если вы хотите добавить новый сайт вручную.")
 
