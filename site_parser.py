@@ -40,6 +40,9 @@ def extract_stock(text):
     match = re.search(r"Доступно:?\s*([\d\s]+)\s*шт", text, re.IGNORECASE)
     if match:
         return clean_text(f"{match.group(1)} шт")
+    match = re.search(r"([\d\s]+)\s*(?:шт\.|ед\.\s*осталось)", text, re.IGNORECASE)
+    if match:
+        return clean_text(f"{match.group(1)} шт")
     return ""
 
 
@@ -145,6 +148,104 @@ def parse_fakel_catalog(manufacturer, catalog_url, soup, max_products):
     return products
 
 
+def looks_like_expert_product_url(url):
+    path = urlparse(url).path.strip("/")
+    parts = path.split("/")
+    return (
+        len(parts) >= 3
+        and parts[0] == "catalog"
+        and parts[1] == "spetsodezhda"
+        and parts[-1] not in {"", "spetsodezhda"}
+    )
+
+
+def nearest_useful_text(tag):
+    current = tag
+    for _ in range(5):
+        if current is None:
+            break
+        text = clean_text(current.get_text(" "))
+        if extract_article(text) or extract_price(text):
+            return text
+        current = current.parent
+    return clean_text(tag.get_text(" "))
+
+
+def product_from_expert_card(manufacturer, url, soup):
+    text = clean_text(soup.get_text(" "))
+    title = soup.find("h1")
+    name = clean_text(title.get_text(" ")) if title else ""
+    article = extract_article(text)
+    price = extract_price(text)
+    stock = extract_stock(text)
+
+    characteristics = []
+    for label in [
+        "Цвет",
+        "Комплектация",
+        "Коллекция",
+        "Материал",
+        "Размеры",
+        "Рост",
+    ]:
+        value = extract_characteristic_value(text, label)
+        if value:
+            characteristics.append(f"{label}: {value}")
+
+    description = clean_text(" ".join([name, *characteristics, text]))
+    return product_from_text(manufacturer, name, description, url, article, price, stock)
+
+
+def product_from_expert_catalog_row(manufacturer, url, name, row_text):
+    description = clean_text(f"{name} {row_text}")
+    return product_from_text(
+        manufacturer=manufacturer,
+        name=name,
+        description=description,
+        url=url,
+        article=extract_article(row_text),
+        price=extract_price(row_text),
+        stock=extract_stock(row_text),
+    )
+
+
+def parse_expert_catalog(manufacturer, catalog_url, soup, max_products):
+    if looks_like_expert_product_url(catalog_url):
+        return [product_from_expert_card(manufacturer, catalog_url, soup)]
+
+    products = []
+    seen_urls = set()
+    product_words = [
+        "костюм",
+        "куртка",
+        "брюки",
+        "полукомбинезон",
+        "жилет",
+        "халат",
+        "фартук",
+        "комбинезон",
+    ]
+
+    for link in soup.find_all("a", href=True):
+        url = urljoin(catalog_url, link["href"])
+        name = clean_text(link.get_text(" "))
+        lowered_name = name.lower()
+
+        if url in seen_urls or not looks_like_expert_product_url(url):
+            continue
+        if len(name) < 8 or not any(word in lowered_name for word in product_words):
+            continue
+
+        row_text = nearest_useful_text(link)
+        products.append(product_from_expert_catalog_row(manufacturer, url, name, row_text))
+        seen_urls.add(url)
+
+        if len(products) >= max_products:
+            break
+
+    return products
+
+
 def looks_like_product_block(tag):
     class_text = " ".join(tag.get("class", [])).lower()
     id_text = (tag.get("id") or "").lower()
@@ -161,6 +262,8 @@ def parse_catalog(manufacturer, catalog_url, max_products=80):
 
     if urlparse(catalog_url).netloc.endswith("f-tk.ru"):
         return parse_fakel_catalog(manufacturer, catalog_url, soup, max_products)
+    if urlparse(catalog_url).netloc.endswith("psk.expert"):
+        return parse_expert_catalog(manufacturer, catalog_url, soup, max_products)
 
     products = []
     seen_urls = set()
