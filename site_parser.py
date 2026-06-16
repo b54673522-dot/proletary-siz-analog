@@ -246,6 +246,143 @@ def parse_expert_catalog(manufacturer, catalog_url, soup, max_products):
     return products
 
 
+def looks_like_spets_product_url(url):
+    path = urlparse(url).path.strip("/")
+    parts = path.split("/")
+    return (
+        len(parts) >= 4
+        and parts[0] == "products"
+        and not path.endswith("products")
+        and not path.endswith("products/spetsodezhda")
+    )
+
+
+def looks_like_spets_category_url(url):
+    path = urlparse(url).path.strip("/")
+    parts = path.split("/")
+    return (
+        len(parts) >= 2
+        and parts[0] == "products"
+        and not looks_like_spets_product_url(url)
+    )
+
+
+def product_from_spets_card(manufacturer, url, soup):
+    text = clean_text(soup.get_text(" "))
+    title = soup.find("h1")
+    name = clean_text(title.get_text(" ")) if title else ""
+    article = extract_article(text)
+    price = extract_price(text)
+    stock = extract_stock(text)
+
+    characteristics = []
+    for label in [
+        "Вид изделия",
+        "Комплектность",
+        "Назначение",
+        "Основной цвет",
+        "Состав",
+        "Материал",
+        "Утеплитель",
+        "Климатические регионы",
+        "Защитные свойства",
+    ]:
+        value = extract_characteristic_value(text, label)
+        if value:
+            characteristics.append(f"{label}: {value}")
+
+    description = clean_text(" ".join([name, *characteristics, text]))
+    return product_from_text(manufacturer, name, description, url, article, price, stock)
+
+
+def product_from_spets_catalog_row(manufacturer, url, name, row_text):
+    description = clean_text(f"{name} {row_text}")
+    return product_from_text(
+        manufacturer=manufacturer,
+        name=name,
+        description=description,
+        url=url,
+        article=extract_article(row_text),
+        price=extract_price(row_text),
+        stock=extract_stock(row_text),
+    )
+
+
+def collect_spets_products_from_soup(manufacturer, catalog_url, soup, max_products):
+    products = []
+    seen_urls = set()
+    product_words = [
+        "костюм",
+        "куртка",
+        "брюки",
+        "полукомбинезон",
+        "комбинезон",
+        "жилет",
+        "халат",
+        "фартук",
+        "рубашка",
+        "футболка",
+        "блуза",
+    ]
+
+    for link in soup.find_all("a", href=True):
+        url = urljoin(catalog_url, link["href"])
+        name = clean_text(link.get_text(" "))
+        lowered_name = name.lower()
+
+        if url in seen_urls or not looks_like_spets_product_url(url):
+            continue
+        if len(name) < 6 or not any(word in lowered_name for word in product_words):
+            continue
+
+        row_text = nearest_useful_text(link)
+        products.append(product_from_spets_catalog_row(manufacturer, url, name, row_text))
+        seen_urls.add(url)
+
+        if len(products) >= max_products:
+            break
+
+    return products
+
+
+def parse_spets_catalog(manufacturer, catalog_url, soup, max_products):
+    if looks_like_spets_product_url(catalog_url):
+        return [product_from_spets_card(manufacturer, catalog_url, soup)]
+
+    products = collect_spets_products_from_soup(manufacturer, catalog_url, soup, max_products)
+    if products:
+        return products
+
+    category_urls = []
+    for link in soup.find_all("a", href=True):
+        url = urljoin(catalog_url, link["href"])
+        if url in category_urls:
+            continue
+        if looks_like_spets_category_url(url) and "/products/" in url:
+            category_urls.append(url)
+
+    for category_url in category_urls[:6]:
+        if len(products) >= max_products:
+            break
+        try:
+            response = requests.get(category_url, headers=HEADERS, timeout=20)
+            response.raise_for_status()
+        except requests.RequestException:
+            continue
+
+        category_soup = BeautifulSoup(response.text, "html.parser")
+        products.extend(
+            collect_spets_products_from_soup(
+                manufacturer,
+                category_url,
+                category_soup,
+                max_products - len(products),
+            )
+        )
+
+    return products[:max_products]
+
+
 def looks_like_product_block(tag):
     class_text = " ".join(tag.get("class", [])).lower()
     id_text = (tag.get("id") or "").lower()
@@ -264,6 +401,8 @@ def parse_catalog(manufacturer, catalog_url, max_products=80):
         return parse_fakel_catalog(manufacturer, catalog_url, soup, max_products)
     if urlparse(catalog_url).netloc.endswith("psk.expert"):
         return parse_expert_catalog(manufacturer, catalog_url, soup, max_products)
+    if urlparse(catalog_url).netloc.endswith("spets.ru"):
+        return parse_spets_catalog(manufacturer, catalog_url, soup, max_products)
 
     products = []
     seen_urls = set()
