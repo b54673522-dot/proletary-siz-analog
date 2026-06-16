@@ -102,6 +102,22 @@ def load_manufacturers():
     return manufacturers
 
 
+def sync_default_manufacturers():
+    current = read_json(MANUFACTURERS_FILE)
+    by_name = {
+        item.get("manufacturer", "").lower(): item
+        for item in current
+        if item.get("manufacturer")
+    }
+
+    for default_item in DEFAULT_MANUFACTURERS:
+        by_name[default_item["manufacturer"].lower()] = default_item
+
+    manufacturers = list(by_name.values())
+    write_json(MANUFACTURERS_FILE, manufacturers)
+    return manufacturers
+
+
 def add_manufacturer(manufacturer, catalog_url):
     manufacturers = load_manufacturers()
     normalized_url = catalog_url.strip()
