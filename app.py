@@ -1,6 +1,8 @@
 from datetime import datetime
 
 import streamlit as st
+import requests
+from bs4 import BeautifulSoup
 
 from data_store import (
     add_confirmed_analog,
@@ -25,6 +27,32 @@ def format_value(value):
     if isinstance(value, list):
         return ", ".join(str(item) for item in value) if value else "не определено"
     return str(value)
+
+
+def read_competitor_page_text(url):
+    response = requests.get(
+        url,
+        headers={"User-Agent": "Mozilla/5.0 (compatible; ProletaryAnalogBot/1.0)"},
+        timeout=20,
+    )
+    response.raise_for_status()
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    for tag in soup(["script", "style", "noscript", "svg"]):
+        tag.decompose()
+
+    parts = []
+    for selector in ["title", "h1", "meta[name='description']", "table", "main", "body"]:
+        for block in soup.select(selector):
+            if block.name == "meta":
+                text = block.get("content", "")
+            else:
+                text = block.get_text(" ", strip=True)
+            text = " ".join((text or "").split())
+            if text and text not in parts:
+                parts.append(text)
+
+    return " ".join(parts)[:12000]
 
 
 def refresh_products():
@@ -128,8 +156,24 @@ if find_clicked:
         st.warning("Вставьте описание товара конкурента.")
         st.stop()
 
-    extracted = extract_characteristics(competitor_description)
-    analogs = find_analogs(competitor_description, products)
+    if not products:
+        st.warning("База товаров пока пустая. Сначала нажмите «Синхронизировать поставщиков», потом «Обновить товары».")
+        st.stop()
+
+    competitor_text = competitor_description
+    if competitor_url.strip():
+        try:
+            page_text = read_competitor_page_text(competitor_url.strip())
+            if page_text:
+                competitor_text = f"{competitor_description}\n\n{page_text}"
+                st.success("Страница конкурента прочитана. Использую описание и данные со ссылки.")
+            else:
+                st.warning("Ссылку открыла, но полезный текст со страницы не нашла. Использую только ваше описание.")
+        except Exception as exc:
+            st.warning(f"Не удалось прочитать ссылку конкурента. Использую только ваше описание. Ошибка: {exc}")
+
+    extracted = extract_characteristics(competitor_text)
+    analogs = find_analogs(competitor_text, products)
 
     st.header("Что определила система")
     char_rows = [
