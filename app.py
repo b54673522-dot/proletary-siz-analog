@@ -10,6 +10,7 @@ from data_store import (
     load_manufacturers,
     load_products,
     save_products,
+    sync_default_manufacturers,
 )
 from matcher import extract_characteristics, find_analogs
 from site_parser import parse_catalog
@@ -49,6 +50,7 @@ def refresh_products():
 
 st.title("Пролетарий: единая база СИЗ и подбор аналогов")
 st.caption("Первая простая версия: сайты производителей -> база товаров -> позиция конкурента -> аналоги.")
+st.caption("Версия поставщиков: Факел + Эксперт + Спецобъединение")
 
 if "auto_refresh_attempted" not in st.session_state:
     st.session_state.auto_refresh_attempted = False
@@ -67,6 +69,10 @@ if not st.session_state.auto_refresh_attempted and load_manufacturers() and not 
 st.header("База производителей")
 st.info("Поставщики загружаются автоматически. Этот блок нужен только если вы хотите добавить новый сайт вручную.")
 
+if st.button("Синхронизировать поставщиков"):
+    sync_default_manufacturers()
+    st.success("Список поставщиков обновлен. Теперь нажмите «Обновить товары».")
+
 with st.form("manufacturer_form", clear_on_submit=False):
     col_name, col_url = st.columns([1, 2])
     with col_name:
@@ -84,6 +90,7 @@ if submitted:
         st.success("Сайт производителя добавлен.")
 
 if st.button("Обновить товары", type="primary"):
+    sync_default_manufacturers()
     with st.spinner("Собираю товары с сайтов производителей..."):
         collected_count, parse_errors = refresh_products()
 
