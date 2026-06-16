@@ -18,6 +18,11 @@ DEFAULT_MANUFACTURERS = [
         "manufacturer": "Эксперт",
         "catalog_url": "https://psk.expert/catalog/spetsodezhda/",
         "added_at": "default",
+    },
+    {
+        "manufacturer": "Спецобъединение",
+        "catalog_url": "https://www.spets.ru/products/",
+        "added_at": "default",
     }
 ]
 
