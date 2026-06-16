@@ -11,7 +11,7 @@ MANUFACTURERS_FILE = DATA_DIR / "manufacturers.json"
 DEFAULT_MANUFACTURERS = [
     {
         "manufacturer": "Факел",
-        "catalog_url": "https://www.f-tk.ru/catalog/spetsodezhda/spetsodezhda_zimnyaya/kostyumy_zimnie/",
+        "catalog_url": "https://www.f-tk.ru/catalog/spetsodezhda/",
         "added_at": "default",
     }
 ]
@@ -66,6 +66,29 @@ def load_manufacturers():
     if not manufacturers:
         write_json(MANUFACTURERS_FILE, DEFAULT_MANUFACTURERS)
         return DEFAULT_MANUFACTURERS
+
+    changed = False
+    for default_item in DEFAULT_MANUFACTURERS:
+        existing = next(
+            (
+                item
+                for item in manufacturers
+                if item.get("manufacturer", "").lower()
+                == default_item["manufacturer"].lower()
+            ),
+            None,
+        )
+        if existing:
+            if existing.get("catalog_url") != default_item["catalog_url"]:
+                existing["catalog_url"] = default_item["catalog_url"]
+                existing["added_at"] = existing.get("added_at") or "default"
+                changed = True
+        else:
+            manufacturers.append(default_item)
+            changed = True
+
+    if changed:
+        write_json(MANUFACTURERS_FILE, manufacturers)
     return manufacturers
 
 
